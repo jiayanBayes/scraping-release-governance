@@ -1,0 +1,196 @@
+name: Witness Generic Crawl Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact operator-staging candidate SHA
+        required: true
+        type: string
+      signer_run_id:
+        description: Exact successful signing workflow run ID
+        required: true
+        type: string
+      signer_run_attempt:
+        description: Exact successful signing workflow attempt
+        required: true
+        type: string
+      administrator_bypass_observation_sha256:
+        description: SHA-256 of Jia's independent public GitHub environment observation
+        required: true
+        type: string
+
+concurrency:
+  group: release-governance-generic-crawl-${{ inputs.candidate_sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  witness:
+    environment: release-governance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the protected governance commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Verify current-cycle operator and immutable governance coordinates
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          REF_PROTECTED: ${{ github.ref_protected }}
+          SIGNER_RUN_ATTEMPT: ${{ inputs.signer_run_attempt }}
+          SIGNER_RUN_ID: ${{ inputs.signer_run_id }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "jiayanBayes/scraping-release-governance"
+          test "$GITHUB_REPOSITORY_OWNER" = "jiayanBayes"
+          test "$GITHUB_REPOSITORY_OWNER_ID" = "33464549"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$REF_PROTECTED" = "true"
+          test "$GITHUB_ACTOR" = "liupeng69"
+          test "$GITHUB_ACTOR_ID" = "30068489"
+          test "$GITHUB_TRIGGERING_ACTOR" = "liupeng69"
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SIGNER_RUN_ID" =~ ^[1-9][0-9]{0,19}$ ]]
+          [[ "$SIGNER_RUN_ATTEMPT" =~ ^[1-9][0-9]{0,9}$ ]]
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          python3 -I - <<'PY'
+          import json, pathlib, re
+          policy = json.loads(pathlib.Path("authority-policy.json").read_text(encoding="ascii"))
+          signer = policy["signer"]
+          rules = policy["signer_environment_rules"]
+          values = (
+              signer["workflow_commit"], signer["workflow_sha256"],
+              rules["required_reviewers_sha256"],
+          )
+          if (
+              re.fullmatch(r"[0-9a-f]{40}", values[0]) is None
+              or any(re.fullmatch(r"[0-9a-f]{64}", item) is None for item in values[1:])
+              or any(set(item) == {"0"} for item in values)
+          ):
+              raise SystemExit("governance policy remains unconfigured")
+          PY
+
+      - name: Download and bind the exact public signer run
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          GH_TOKEN: ${{ github.token }}
+          SIGNER_RUN_ATTEMPT: ${{ inputs.signer_run_attempt }}
+          SIGNER_RUN_ID: ${{ inputs.signer_run_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          root="$RUNNER_TEMP/release-governance"
+          install -d -m 0700 "$root/subject" "$root/evidence"
+          signer_commit="$(jq -er .signer.workflow_commit authority-policy.json)"
+          signer_workflow="$(jq -er .signer.workflow authority-policy.json)"
+          signer_ref="$(jq -er .signer.source_ref authority-policy.json)"
+          gh api \
+            "repos/liupeng69/scraping-release-signing/actions/runs/${SIGNER_RUN_ID}/attempts/${SIGNER_RUN_ATTEMPT}" \
+            > "$root/evidence/signer-run.json"
+          jq -e \
+            --arg candidate "$CANDIDATE_SHA" \
+            --argjson id "$SIGNER_RUN_ID" \
+            --argjson attempt "$SIGNER_RUN_ATTEMPT" \
+            --arg sha "$signer_commit" \
+            --arg path "$signer_workflow" \
+            --arg ref "$signer_ref" '
+              .id == $id and .run_attempt == $attempt
+              and .name == "Authorize Generic Crawl Release"
+              and .path == $path and .head_sha == $sha
+              and ("refs/heads/" + .head_branch) == $ref
+              and .event == "workflow_dispatch"
+              and .status == "completed" and .conclusion == "success"
+              and .repository.full_name == "liupeng69/scraping-release-signing"
+              and .repository.id == 1351773155
+              and .actor.login == "liupeng69" and .actor.id == 30068489
+              and .triggering_actor.login == "liupeng69"
+            ' "$root/evidence/signer-run.json" >/dev/null
+          gh run download "$SIGNER_RUN_ID" \
+            --repo liupeng69/scraping-release-signing \
+            --name "operator-staging-generic-crawl-guardian-${CANDIDATE_SHA}-${SIGNER_RUN_ATTEMPT}" \
+            --dir "$root/subject"
+          subject="$root/subject/generic-crawl-guardian-receipt.json"
+          test -s "$subject"
+          test ! -L "$subject"
+          test "$(jq -er .candidate_sha "$subject")" = "$CANDIDATE_SHA"
+          test "$(jq -er .guardian_install_run_id "$subject")" = "$SIGNER_RUN_ID"
+          test "$(jq -er .guardian_install_run_attempt "$subject")" = "$SIGNER_RUN_ATTEMPT"
+
+      - name: Verify signer workflow blob and live protected environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/release-governance"
+          signer_commit="$(jq -er .signer.workflow_commit authority-policy.json)"
+          signer_workflow="$(jq -er .signer.workflow authority-policy.json)"
+          expected_workflow_sha="$(jq -er .signer.workflow_sha256 authority-policy.json)"
+          gh api \
+            -H "Accept: application/vnd.github.raw+json" \
+            "repos/liupeng69/scraping-release-signing/contents/${signer_workflow}?ref=${signer_commit}" \
+            > "$root/evidence/signer-workflow.yml"
+          test "$(sha256sum "$root/evidence/signer-workflow.yml" | awk '{print $1}')" = "$expected_workflow_sha"
+          gh api \
+            repos/liupeng69/scraping-release-signing/environments/release-signing \
+            > "$root/evidence/signer-environment.json"
+
+      - name: Verify signer provenance and build the governance predicate
+        id: predicate
+        env:
+          ADMIN_BYPASS_OBSERVATION_SHA256: ${{ inputs.administrator_bypass_observation_sha256 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/release-governance"
+          subject="$root/subject/generic-crawl-guardian-receipt.json"
+          signer_commit="$(jq -er .signer.workflow_commit authority-policy.json)"
+          signer_workflow="$(jq -er .signer.workflow authority-policy.json)"
+          gh attestation verify "$subject" \
+            --repo liupeng69/scraping-release-signing \
+            --signer-repo liupeng69/scraping-release-signing \
+            --signer-workflow "liupeng69/scraping-release-signing/${signer_workflow}" \
+            --signer-digest "$signer_commit" \
+            --source-digest "$signer_commit" \
+            --source-ref refs/heads/main \
+            --cert-identity "https://github.com/liupeng69/scraping-release-signing/${signer_workflow}@refs/heads/main" \
+            --deny-self-hosted-runners \
+            --limit 1 \
+            --predicate-type https://slsa.dev/provenance/v1 \
+            --format json > "$root/evidence/signer-attestation.json"
+          python3 -I scripts/governance.py \
+            --policy authority-policy.json \
+            --subject "$subject" \
+            --signer-attestation "$root/evidence/signer-attestation.json" \
+            --signer-environment "$root/evidence/signer-environment.json" \
+            --admin-bypass-observation-sha256 "$ADMIN_BYPASS_OBSERVATION_SHA256" \
+            --output "$root/governance-predicate.json" >/dev/null
+          subject_sha256="$(sha256sum "$subject" | awk '{print $1}')"
+          echo "subject_sha256=$subject_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Keylessly attest the exact guardian with the governance predicate
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763
+        with:
+          subject-name: generic-crawl-guardian-receipt.json
+          subject-digest: sha256:${{ steps.predicate.outputs.subject_sha256 }}
+          predicate-type: https://scraping-platform.invalid/attestations/independent-release-signer-governance/v1
+          predicate-path: ${{ runner.temp }}/release-governance/governance-predicate.json
+          show-summary: false
+
+      - name: Upload only the public governance predicate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: generic-crawl-governance-${{ inputs.candidate_sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-governance/governance-predicate.json
+          if-no-files-found: error
+          retention-days: 7

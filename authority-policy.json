@@ -1,0 +1,33 @@
+{
+  "schema_version": "scraping_release_governance_policy.v1",
+  "current_cycle": {
+    "operator": {
+      "id": "30068489",
+      "login": "liupeng69"
+    },
+    "reviewer": {
+      "id": "33464549",
+      "login": "jiayanBayes"
+    }
+  },
+  "signer": {
+    "build_trigger": "workflow_dispatch",
+    "environment": "release-signing",
+    "predicate_type": "https://slsa.dev/provenance/v1",
+    "repository": "liupeng69/scraping-release-signing",
+    "repository_id": 1351773155,
+    "repository_visibility": "public",
+    "source_ref": "refs/heads/main",
+    "workflow": ".github/workflows/authorize-generic-crawl-release.yml",
+    "workflow_commit": "405dda41290a77429c0dc63a255b49de4f8205e7",
+    "workflow_sha256": "dc881036e3a7c7a90210f493a6c7980eba1b9e05fc17f69f034f17ab569068fb"
+  },
+  "signer_environment_rules": {
+    "administrator_bypass_disabled": true,
+    "custom_branch_policies": false,
+    "environment": "release-signing",
+    "prevent_self_review": true,
+    "protected_branches_only": true,
+    "required_reviewers_sha256": "9dfe221bcf0c8dc1f9b2c391a6b8d4d81418fb48b38ddb78d2f78806e638da8e"
+  }
+}
