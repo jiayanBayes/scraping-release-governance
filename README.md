@@ -25,7 +25,7 @@ workflow then creates a custom Sigstore/GitHub attestation over the exact same
 guardian receipt.
 
 `authority-policy.json` is pre-bound to signing repository commit
-`405dda41290a77429c0dc63a255b49de4f8205e7`, the exact authorization workflow
+`0757cb856f5ea0fc13548d52665e83379291a6fa`, the exact authorization workflow
 blob, and the exact one-reviewer environment projection observed on 2026-08-30.
 Jia must verify those values before the initial push. After the push, protect `main` with an active no-bypass ruleset, create the
 `release-governance` environment with Jia as the sole required reviewer,
