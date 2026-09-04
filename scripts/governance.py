@@ -25,6 +25,10 @@ PREDICATE_TYPE: Final = (
     "independent-release-signer-governance/v1"
 )
 MAX_CLOCK_SKEW: Final = timedelta(minutes=5)
+GITHUB_ATTESTATION_CERTIFICATE_ISSUER: Final = (
+    "CN=sigstore-intermediate,O=sigstore.dev"
+)
+GITHUB_ACTIONS_OIDC_ISSUER: Final = "https://token.actions.githubusercontent.com"
 
 
 class GovernanceError(ValueError):
@@ -66,7 +70,7 @@ def _utc(value: Any, label: str) -> datetime:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
         _reject_from(f"{label} invalid", exc)
-    if parsed.utcoffset() != timedelta(0):
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
         _reject(f"{label} invalid")
     return parsed.astimezone(timezone.utc)
 
@@ -179,7 +183,8 @@ def _signer_evidence(
         f"{signer['source_ref']}"
     )
     expected_certificate = {
-        "certificateIssuer": "https://token.actions.githubusercontent.com",
+        "certificateIssuer": GITHUB_ATTESTATION_CERTIFICATE_ISSUER,
+        "issuer": GITHUB_ACTIONS_OIDC_ISSUER,
         "subjectAlternativeName": workflow_identity,
         "buildSignerURI": workflow_identity,
         "buildSignerDigest": signer["workflow_commit"],

@@ -158,12 +158,11 @@ jobs:
           signer_workflow="$(jq -er .signer.workflow authority-policy.json)"
           gh attestation verify "$subject" \
             --repo liupeng69/scraping-release-signing \
-            --signer-repo liupeng69/scraping-release-signing \
             --signer-workflow "liupeng69/scraping-release-signing/${signer_workflow}" \
             --signer-digest "$signer_commit" \
             --source-digest "$signer_commit" \
             --source-ref refs/heads/main \
-            --cert-identity "https://github.com/liupeng69/scraping-release-signing/${signer_workflow}@refs/heads/main" \
+            --cert-oidc-issuer https://token.actions.githubusercontent.com \
             --deny-self-hosted-runners \
             --limit 1 \
             --predicate-type https://slsa.dev/provenance/v1 \
