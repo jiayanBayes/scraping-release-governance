@@ -38,5 +38,15 @@ The workflow fails closed unless GitHub's live environment API also reports
 `can_admins_bypass=false`. It binds the SHA-256 of Jia's independent public-API
 observation into the custom governance predicate.
 
+Signer provenance verification deliberately uses one GitHub CLI identity-selector
+family: `--signer-workflow`. `--signer-repo`, `--cert-identity`, and
+`--cert-identity-regex` must not be combined with it. Repository, workflow,
+workflow commit, source commit/ref, hosted-runner posture, predicate type, and
+the GitHub Actions OIDC issuer remain independently pinned. In the verified
+GitHub CLI JSON projection, `certificateIssuer` is the X.509 certificate-chain
+issuer (`CN=sigstore-intermediate,O=sigstore.dev`) and `issuer` is the GitHub
+Actions OIDC issuer (`https://token.actions.githubusercontent.com`). The helper
+requires both exact fields and rejects missing, swapped, or aliased values.
+
 No private candidate source, AWS credential, AWS secret value, private key, or
 private-repository token belongs in this repository.
